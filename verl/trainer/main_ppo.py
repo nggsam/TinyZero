@@ -32,15 +32,7 @@ def _select_rm_score_fn(data_source, **kwargs):
     print("data_source: ", data_source)
     print("is_validation: ", is_validation)
 
-    if data_source == 'openai/gsm8k':
-        return gsm8k.compute_score
-    elif data_source == 'lighteval/MATH':
-        return math.compute_score
-    elif "multiply" in data_source or "arithmetic" in data_source:
-        return multiply.compute_score
-    elif "countdown" in data_source:
-        return countdown.compute_score
-    elif "countdown_withnoise" in data_source:
+    if data_source == "countdown_withnoise":
         if is_validation:
             noise_prob = 0.0
         else:
@@ -48,6 +40,14 @@ def _select_rm_score_fn(data_source, **kwargs):
 
         print(f"noise_prob: {noise_prob}")
         return functools.partial(countdown_withnoise.compute_score, noise_prob=noise_prob)
+    elif data_source == 'openai/gsm8k':
+        return gsm8k.compute_score
+    elif data_source == 'lighteval/MATH':
+        return math.compute_score
+    elif "multiply" in data_source or "arithmetic" in data_source:
+        return multiply.compute_score
+    elif "countdown" in data_source:
+        return countdown.compute_score
     else:
         raise NotImplementedError
 
