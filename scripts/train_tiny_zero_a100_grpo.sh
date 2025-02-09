@@ -37,4 +37,4 @@ python3 -m verl.trainer.main_ppo \
     trainer.keep_last_n_checkpoints=3 \
     trainer.project_name=TinyZero \
     trainer.experiment_name=$EXPERIMENT_NAME \
-    trainer.total_epochs=15 2>&1 | tee verl_demo.log
+    trainer.total_epochs=15 2>&1 | tee "outputs/${EXPERIMENT_NAME}.log"
