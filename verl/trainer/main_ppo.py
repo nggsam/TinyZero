@@ -14,14 +14,24 @@
 """
 Note that we don't combine the main with ray_trainer as ray_trainer is used by other main.
 """
+import functools
 
 from verl import DataProto
 import torch
-from verl.utils.reward_score import gsm8k, math, multiply, countdown
+from verl.utils.reward_score import gsm8k, math, multiply, countdown, countdown_withnoise
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 
 
-def _select_rm_score_fn(data_source):
+def _select_rm_score_fn(data_source, **kwargs):
+    """Select the reward score function based on the data source."""
+
+    # Get _is_validation from **kwargs
+    if 'is_validation' in kwargs:
+        is_validation = kwargs['is_validation']
+
+    print("data_source: ", data_source)
+    print("is_validation: ", is_validation)
+
     if data_source == 'openai/gsm8k':
         return gsm8k.compute_score
     elif data_source == 'lighteval/MATH':
@@ -30,6 +40,14 @@ def _select_rm_score_fn(data_source):
         return multiply.compute_score
     elif "countdown" in data_source:
         return countdown.compute_score
+    elif "countdown_withnoise" in data_source:
+        if is_validation:
+            noise_prob = 0.0
+        else:
+            noise_prob = 0.1
+
+        print(f"noise_prob: {noise_prob}")
+        return functools.partial(countdown_withnoise.compute_score, noise_prob=noise_prob)
     else:
         raise NotImplementedError
 
@@ -38,9 +56,10 @@ class RewardManager():
     """The reward manager.
     """
 
-    def __init__(self, tokenizer, num_examine) -> None:
+    def __init__(self, tokenizer, num_examine, is_validation: bool) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
+        self.is_validation = is_validation  # whether this is a validation reward manager.
 
     def __call__(self, data: DataProto):
         """We will expand this function gradually based on the available datasets"""
@@ -75,7 +94,7 @@ class RewardManager():
 
             # select rm_score
             data_source = data_item.non_tensor_batch['data_source']
-            compute_score_fn = _select_rm_score_fn(data_source)
+            compute_score_fn = _select_rm_score_fn(data_source, is_validation=self.is_validation)
 
             score = compute_score_fn(solution_str=sequences_str, ground_truth=ground_truth)
             reward_tensor[i, valid_response_length - 1] = score
@@ -171,10 +190,10 @@ def main_task(config):
         role_worker_mapping[Role.RewardModel] = ray.remote(RewardModelWorker)
         mapping[Role.RewardModel] = global_pool_id
 
-    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0)
+    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0, is_validation=False)
 
     # Note that we always use function-based RM for validation
-    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1)
+    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1, is_validation=True)
 
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
 
